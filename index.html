@@ -53,6 +53,17 @@ button,input{font:inherit;color:inherit}
 .tab[aria-selected=true]{color:var(--ink);background:var(--row)}
 .tab[aria-selected=true] i::after{background:var(--yellow)}
 .tab.full span{color:var(--yellow)}
+.tab span.bump{animation:bump .45s var(--ease)}
+@keyframes bump{30%{transform:scale(1.3);color:var(--yellow)}}
+.m input.pop{animation:pop .4s var(--ease)}
+@keyframes pop{0%{transform:scale(.8)}45%{transform:scale(1.18);box-shadow:0 0 0 6px rgb(255 210 31 / .25)}100%{transform:scale(1);box-shadow:0 0 0 12px rgb(255 210 31 / 0)}}
+.empty.party img{animation:crest .7s var(--ease) both}
+.empty.party b{animation:rise .5s .15s var(--ease) both}
+@keyframes crest{0%{transform:scale(.4) rotate(-12deg);opacity:0}60%{transform:scale(1.08) rotate(2deg);opacity:1}100%{transform:none}}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}}
+.confetti{position:fixed;inset:0;pointer-events:none;z-index:20;overflow:hidden}
+.confetti i{position:absolute;width:8px;height:12px;border-radius:2px}
+#sum.bump{animation:bump .45s var(--ease)}
 @media (hover:hover){.tab:hover{color:var(--ink)}}
 
 /* tools */
@@ -77,7 +88,6 @@ main{max-width:640px;margin:0 auto;padding:var(--s2) var(--s4) var(--s6)}
 .hint svg{flex:none;width:18px;height:18px;color:var(--gold);margin-top:1px}
 ul{list-style:none;margin:0;padding:0}
 .m{display:flex;align-items:center;gap:var(--s3);min-height:68px;padding:10px 10px 10px var(--s3);border-radius:var(--r);background:var(--row);margin-bottom:6px;transition:background-color .2s var(--ease),opacity .25s var(--ease),transform .25s var(--ease)}
-.m.leave{opacity:0;transform:translateX(16px)}
 .m.flash{animation:flash 1.2s var(--ease)}
 @keyframes flash{0%{box-shadow:inset 0 0 0 2px var(--yellow)}100%{box-shadow:inset 0 0 0 2px transparent}}
 .m label{flex:1;min-width:0;display:flex;align-items:center;gap:var(--s3);cursor:pointer;align-self:stretch}
@@ -135,7 +145,8 @@ details[open] summary svg{rotate:180deg}
 .dock .in{animation:up .32s var(--ease)}
 @keyframes up{from{opacity:0;transform:translateY(16px)}}
 @media (prefers-reduced-motion:reduce){
-  .m,.m.leave{transform:none!important}
+  .m input.pop,.tab span.bump,#sum.bump{animation:none}
+  .empty.party img,.empty.party b{animation:fade .3s linear both}
   .dock .in{animation:fade .2s linear}
   @keyframes fade{from{opacity:0}}
   .m.flash{animation:none;box-shadow:inset 0 0 0 2px var(--yellow)}
@@ -211,14 +222,20 @@ DATA.groups.forEach((g,i)=>g.members.forEach(m=>{m.key=m.p||m.u;m.g=i;m.label=m.
 const fromHash=()=>{const i=DATA.groups.findIndex(g=>slug(g.who)===decodeURIComponent(location.hash.slice(1)));if(i>=0)ui.g=i};
 fromHash();
 
+const RM=matchMedia('(prefers-reduced-motion: reduce)').matches,EASE='cubic-bezier(.16,1,.3,1)';
+const bump=el=>{el.classList.remove('bump');void el.offsetWidth;el.classList.add('bump')};
 function tabs(){
-  $('#tabs').innerHTML=DATA.groups.map((g,i)=>{const d=g.members.filter(m=>st[m.key]).length,n=g.members.length;
+  const nav=$('#tabs');
+  if(nav.children.length){DATA.groups.forEach((g,i)=>{const b=nav.children[i],d=g.members.filter(m=>st[m.key]).length,n=g.members.length,s=b.querySelector('span'),txt=`${d}/${n}`;
+    b.setAttribute('aria-selected',i==ui.g);b.tabIndex=i==ui.g?0:-1;b.classList.toggle('full',d===n);b.style.setProperty('--p',d/n);b.setAttribute('aria-label',`${g.who}, ${n} kişiden ${d} tamamlandı`);
+    if(s.textContent!==txt){s.textContent=txt;bump(s)}})}
+  else nav.innerHTML=DATA.groups.map((g,i)=>{const d=g.members.filter(m=>st[m.key]).length,n=g.members.length;
     return `<button class="tab${d===n?' full':''}" role="tab" id="tab${i}" aria-controls="panel" aria-selected="${i==ui.g}" tabindex="${i==ui.g?0:-1}" data-g="${i}" style="--p:${d/n}" aria-label="${g.who}, ${n} kişiden ${d} tamamlandı"><b>${g.who}</b><span>${d}/${n}</span><i></i></button>`}).join('');
   $('#panel').setAttribute('aria-labelledby','tab'+ui.g);
   const all=DATA.groups.flatMap(g=>g.members),d=all.filter(m=>st[m.key]).length;
-  $('#sum').textContent=`${all.length} üyeden ${d} kişiye ulaşıldı`;
+  const sv=`${all.length} üyeden ${d} kişiye ulaşıldı`,se=$('#sum');if(se.textContent&&se.textContent!==sv)bump(se);se.textContent=sv;
 }
-function render(){
+function render(o={}){
   const g=DATA.groups[ui.g],term=tr(q.value.trim());
   const dg=/^[\d\s+()-]+$/.test(term)?term.replace(/\D/g,'').replace(/^0/,''):'';
   const hit=m=>!term||m.q.includes(term)||(dg.length>2&&!!m.p&&m.p.includes(dg));
@@ -233,16 +250,28 @@ function render(){
   if(!ms.length)e.innerHTML=term?`<b>Sonuç yok</b>“${esc(q.value.trim())}” ${g.who} listesinde yok.<br><button data-act="clear">Aramayı temizle</button>`
     :ui.f==='todo'?`<img src="apple-touch-icon.png" alt=""><b>${g.who} listesi tamam</b>${g.members.length} kişinin hepsine ulaşıldı. Eline sağlık.`
     :`<b>Henüz kimse işaretlenmedi</b>Ulaştığın kişinin yanındaki daireye dokun, burada görünsün.<br><button data-act="todo">Kalanları göster</button>`;
+  e.classList.toggle('party',!!o.party);
+  if(o.enter&&!RM)[...list.children].slice(0,12).forEach((li,i)=>li.animate([{opacity:0,transform:'translateY(10px)'},{opacity:1,transform:'none'}],{duration:320,delay:i*28,easing:EASE,fill:'backwards'}));
+  if(o.back){const li=list.querySelector(`[data-k="${CSS.escape(o.back)}"]`);if(li){li.classList.add('flash');RM||li.animate([{opacity:0,transform:'translateX(-16px)'},{opacity:1,transform:'none'}],{duration:320,easing:EASE})}}
   tabs();
 }
+function confetti(i){if(RM)return;const r=$('#tab'+i).getBoundingClientRect(),c=document.createElement('div'),cols=['#ffd21f','#e0bd6a','#f3f4fa','#25d366','#ffd21f'];c.className='confetti';
+  for(let n=0;n<36;n++){const p=document.createElement('i'),a=Math.random()*Math.PI-Math.PI,v=120+Math.random()*220,x=Math.cos(a)*v*.9,y=-Math.sin(a)*-v+260+Math.random()*200;
+    p.style.cssText=`left:${r.left+r.width/2}px;top:${r.bottom}px;background:${cols[n%5]}`;c.append(p);
+    p.animate([{transform:'translate(0,0) rotate(0)',opacity:1},{transform:`translate(${x*.7}px,${y*.35}px) rotate(${Math.random()*360}deg)`,opacity:1,offset:.35},{transform:`translate(${x}px,${y}px) rotate(${Math.random()*720}deg)`,opacity:0}],{duration:1100+Math.random()*500,easing:'cubic-bezier(.2,.6,.4,1)',fill:'forwards'})}
+  document.body.append(c);setTimeout(()=>c.remove(),1800)}
 function setDone(k,v){if(v)st[k]=1;else delete st[k];store(K,st)}
 function toggle(k,v,{undo=true}={}){
   setDone(k,v);const m=byKey[k];
   const li=list.querySelector(`[data-k="${CSS.escape(k)}"]`);
   const gone=li&&ui.f!=='all'&&m.g===ui.g;
-  if(li){li.classList.toggle('done',v);li.querySelector('input').checked=v}
-  if(gone){li.classList.add('leave');setTimeout(render,260)}else render();
-  if(undo)toast(v?`${m.label} işaretlendi`:`${m.label} geri alındı`,'Geri al',()=>{setDone(k,!v);render()});
+  const g=DATA.groups[m.g],full=v&&g.members.every(x=>st[x.key]);
+  if(li){li.classList.toggle('done',v);const c=li.querySelector('input');c.checked=v;if(v&&!RM){c.classList.remove('pop');void c.offsetWidth;c.classList.add('pop')}}
+  const after=()=>{render({party:full&&ui.f==='todo'});if(full)confetti(m.g)};
+  if(gone){li.style.overflow='hidden';const h=li.offsetHeight;
+    li.animate(RM?[{opacity:1},{opacity:0}]:[{height:h+'px',opacity:1,transform:'none',marginBottom:'6px'},{height:h+'px',opacity:0,transform:'translateX(28px)',marginBottom:'6px',offset:.5},{height:0,opacity:0,transform:'translateX(28px)',marginBottom:0,paddingTop:0,paddingBottom:0}],{duration:RM?150:420,delay:v?220:0,easing:EASE,fill:'forwards'}).finished.then(after)}
+  else after();
+  if(undo)toast(full?`${g.who} listesi tamamlandı!`:v?`${m.label} işaretlendi`:`${m.label} geri alındı`,'Geri al',()=>{setDone(k,!v);render({back:k})});
 }
 let tt;function toast(msg,label,fn){const t=$('#toast'),a=$('#tact');$('#tmsg').textContent=msg;a.hidden=!label;a.textContent=label||'';
   a.onclick=()=>{hideToast();fn&&fn()};t.hidden=false;t.classList.remove('in');void t.offsetWidth;t.classList.add('in');clearTimeout(tt);tt=setTimeout(hideToast,5000)}
@@ -252,8 +281,8 @@ function closeSheet(){$('#sheet').hidden=true}
 
 $('#tabs').addEventListener('click',e=>{const b=e.target.closest('.tab');if(!b)return;go(+b.dataset.g)});
 $('#tabs').addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight'].includes(e.key))return;const n=(ui.g+(e.key==='ArrowRight'?1:3))%4;go(n);$('#tab'+n).focus()});
-function go(i){ui.g=i;store(K+'Ui',ui);history.replaceState(null,'','#'+slug(DATA.groups[i].who));closeSheet();render();scrollTo({top:0})}
-$('#filters').addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b)return;ui.f=b.dataset.f;store(K+'Ui',ui);render()});
+function go(i){ui.g=i;store(K+'Ui',ui);history.replaceState(null,'','#'+slug(DATA.groups[i].who));closeSheet();render({enter:true});scrollTo({top:0})}
+$('#filters').addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b)return;if(ui.f===b.dataset.f)return;ui.f=b.dataset.f;store(K+'Ui',ui);render({enter:true})});
 $('#empty').addEventListener('click',e=>{const a=e.target.closest('button')?.dataset.act;if(a==='clear')$('#qc').click();if(a==='todo'){ui.f='todo';store(K+'Ui',ui);render()}});
 list.addEventListener('change',e=>toggle(e.target.closest('.m').dataset.k,e.target.checked));
 list.addEventListener('click',e=>{const a=e.target.closest('.go');if(!a)return;const k=a.closest('.m').dataset.k;seen[k]=1;store(K+'Seen',seen);pending=k;
@@ -268,10 +297,11 @@ q.addEventListener('input',()=>{$('#sbox').classList.toggle('has',!!q.value);ren
 $('#qc').onclick=()=>{q.value='';$('#sbox').classList.remove('has');render();q.focus()};
 $('#reset').onclick=()=>{const g=DATA.groups[ui.g],prev=g.members.filter(m=>st[m.key]).map(m=>m.key);
   prev.forEach(k=>{delete st[k];delete seen[k]});store(K,st);store(K+'Seen',seen);render();
-  toast(`${g.who} listesinde ${prev.length} işaret temizlendi`,'Geri al',()=>{prev.forEach(k=>st[k]=1);store(K,st);render()})};
+  toast(`${g.who} listesinde ${prev.length} işaret temizlendi`,'Geri al',()=>{prev.forEach(k=>st[k]=1);store(K,st);render({enter:true})})};
+
 addEventListener('hashchange',()=>{fromHash();render()});
 $('#links').innerHTML=DATA.groups.map(g=>`<a href="#${slug(g.who)}" style="color:var(--ink-2)">${g.who}</a>`).join(' · ');
-render();
+render({enter:true});
 </script>
 </body>
 </html>
